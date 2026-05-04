@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transporte Asambleas - Con Google Sheets</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+        .header { background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e5e5e5; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .header h1 { font-size: 24px; margin-bottom: 0.5rem; }
+        .header p { color: #666; font-size: 14px; }
+        .sync-status { padding: 0.5rem 1rem; background: #e8f5e9; color: #2e7d32; border-radius: 6px; font-size: 12px; margin-top: 0.5rem; display: none; }
+        .sync-status.syncing { background: #fff3e0; color: #e65100; }
+        .sync-status.error { background: #ffebee; color: #c62828; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+        .stat-card { background: #f9f9f9; padding: 1rem; border-radius: 8px; border: 1px solid #e5e5e5; }
+        .stat-label { font-size: 13px; color: #666; margin-bottom: 0.5rem; }
+        .stat-value { font-size: 24px; font-weight: 600; color: #333; }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid #e5e5e5; overflow-x: auto; }
+        .tab-btn { padding: 0.75rem 1rem; background: none; border: none; cursor: pointer; font-size: 14px; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
+        .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        input[type="text"], input[type="number"], input[type="date"], select { width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; margin-bottom: 0.5rem; }
+        input:focus, select:focus { outline: none; border-color: #2563eb; background: #f0f7ff; }
+        .member-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .member-card { background: white; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s; }
+        .member-card:hover { border-color: #2563eb; }
+        .member-card.selected { border: 2px solid #2563eb; background: #f0f7ff; }
+        .member-name { font-weight: 600; margin-bottom: 0.5rem; }
+        .member-info { display: flex; justify-content: space-between; font-size: 13px; color: #666; }
+        .progress-bar { width: 100%; height: 8px; background: #e5e5e5; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-fill { height: 100%; background: #16a34a; transition: width 0.3s; }
+        button { padding: 0.75rem 1rem; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        button:hover { background: #1d4ed8; }
+        button.danger { background: #dc2626; }
+        button.danger:hover { background: #b91c1c; }
+        button.success { background: #16a34a; }
+        button.success:hover { background: #15803d; }
+        button.secondary { background: #6b7280; }
+        button.secondary:hover { background: #4b5563; }
+        .form-section { background: white; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 13px; color: #666; margin-bottom: 0.5rem; font-weight: 500; }
+        .btn-group { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .btn-group button { flex: 1; }
+        .payment-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9f9f9; border-radius: 6px; margin-bottom: 0.5rem; font-size: 14px; }
+        .payment-amount { font-weight: 600; color: #16a34a; }
+        .alert { padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 14px; border-left: 4px solid; }
+        .alert-success { background: #dcfce7; color: #166534; border-left-color: #16a34a; }
+        .alert-danger { background: #fee2e2; color: #991b1b; border-left-color: #dc2626; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .report-table { width: 100%; border-collapse: collapse; font-size: 13px; background: white; border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
+        .report-table th { background: #f9f9f9; padding: 0.75rem; text-align: left; font-weight: 600; border-bottom: 1px solid #e5e5e5; }
+        .report-table td { padding: 0.75rem; border-bottom: 1px solid #f0f0f0; }
+        .report-table tr:hover { background: #f9f9f9; }
+        .badge-trip1 { display: inline-block; background: #16a34a; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 4px; }
+        .badge-trip2-ok { display: inline-block; background: #2563eb; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 4px; }
+        .badge-trip2-cancel { display: inline-block; background: #f59e0b; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 4px; }
+        .trip-info-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.75rem 1rem; margin-top: 0.5rem; font-size: 13px; }
+        .trip-info-box.refund { background: #fffbeb; border-color: #fde68a; }
+        .badge-complete { display: inline-block; background: #16a34a; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
+        .badge-inactive { display: inline-block; background: #dc2626; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
+        .member-card.completed { border-left: 4px solid #16a34a; }
+        .member-card.inactive-card { opacity: 0.65; border-left: 4px solid #dc2626; }
+        .copy-notif-btn { padding: 0.4rem 0.75rem; font-size: 12px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 0.5rem; }
+        .copy-notif-btn:hover { background: #4b5563; }
+        .filter-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .pill { padding: 0.4rem 1rem; border-radius: 20px; border: 1px solid #ddd; background: white; cursor: pointer; font-size: 13px; color: #555; transition: all 0.2s; }
+        .pill.active { background: #2563eb; color: white; border-color: #2563eb; }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .tabs { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay" style="position:fixed;inset:0;background:rgba(255,255,255,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;">
+        <div style="width:48px;height:48px;border:5px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <p id="loadingMsg" style="font-size:15px;color:#555;font-family:sans-serif;">Cargando datos desde Google Sheets...</p>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+    <div class="container">
+        <div class="header">
+            <h1>💰 Transporte Asambleas</h1>
+            <p>Control de pagos con sincronización automática a Google Sheets</p>
+            <div style="display:flex;align-items:center;justify-content:center;gap:0.75rem;flex-wrap:wrap;margin-top:0.25rem;">
+                <div class="sync-status" id="syncStatus"></div>
+                <button onclick="reloadFromSheets()" title="Recargar datos desde Google Sheets" style="padding:0.3rem 0.9rem;font-size:12px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.5);border-radius:6px;cursor:pointer;color:white;">🔄 Recargar</button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Miembros activos</div>
+                <div class="stat-value" id="totalMembers">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Recaudado</div>
+                <div class="stat-value" id="totalRecaudado">$0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Por recaudar</div>
+                <div class="stat-value" id="totalPendiente">$0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avance</div>
+                <div class="stat-value" id="avancePorc">0%</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('registro')">Registrar pago</button>
+            <button class="tab-btn" onclick="switchTab('editar')">Editar pagos</button>
+            <button class="tab-btn" onclick="switchTab('miembros')">Gestionar miembros</button>
+            <button class="tab-btn" onclick="switchTab('notificaciones')">Notificaciones</button>
+            <button class="tab-btn" onclick="switchTab('reportes')">Reportes</button>
+        </div>
+
+        <!-- Tab: Registro -->
+        <div id="registro" class="tab-content active">
+            <div class="form-section">
+                <div class="form-group">
+                    <label>Selecciona miembro:</label>
+                    <input type="text" id="searchMember" placeholder="Buscar..." oninput="filterMembers()">
+                    <div id="membersList" class="member-list" style="max-height: 300px; overflow-y: auto;"></div>
+                </div>
+
+                <div id="selectedMemberInfo" style="display: none; margin-top: 1.5rem; padding: 1rem; background: #f0f7ff; border-radius: 8px;">
+                    <div style="font-weight: 600; margin-bottom: 0.5rem;" id="selectedName"></div>
+                    <div style="font-size: 13px; color: #666; margin-bottom: 0.5rem;">
+                        Adeuda: <strong id="selectedSaldo">$0</strong>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="selectedProgress" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="form-group">
+                        <label>Cantidad:</label>
+                        <input type="number" id="paymentAmount" placeholder="Ej: 200" min="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha:</label>
+                        <input type="date" id="paymentDate">
+                    </div>
+                    <button onclick="addPayment()" style="width: 100%;">Registrar pago</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Editar pagos -->
+        <div id="editar" class="tab-content">
+            <div class="form-section">
+                <div class="form-group">
+                    <label>Busca el miembro con error:</label>
+                    <input type="text" id="searchError" placeholder="Buscar..." oninput="filterErrorMembers()">
+                    <div id="errorMembersList" class="member-list" style="max-height: 300px; overflow-y: auto;"></div>
+                </div>
+
+                <div id="editPaymentSection" style="display: none; margin-top: 1.5rem;">
+                    <h3 style="font-size: 16px; margin-bottom: 1rem;">Pagos registrados</h3>
+                    <div id="editPaymentsList" style="max-height: 400px; overflow-y: auto;"></div>
+                    
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: #f0f7ff; border-radius: 8px;">
+                        <label style="margin-bottom: 0.5rem;">Transferir pago a:</label>
+                        <select id="transferToMember">
+                            <option value="">-- Selecciona miembro --</option>
+                        </select>
+                        <button id="transferBtn" onclick="transferPayment()" style="width: 100%; margin-top: 0.5rem;" disabled>Transferir pago</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Gestionar miembros -->
+        <div id="miembros" class="tab-content">
+            <div class="form-section">
+                <h3 style="font-size: 16px; margin-bottom: 1rem;">Gestionar miembros</h3>
+                <div class="form-group">
+                    <input type="text" id="searchMembersGestion" placeholder="Buscar miembro..." oninput="filterMembersGestion()">
+                </div>
+                <div id="gestionMembersList" class="member-list" style="max-height: 500px; overflow-y: auto;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Notificaciones -->
+        <div id="notificaciones" class="tab-content">
+            <div class="form-section">
+                <h3 style="font-size: 16px; margin-bottom: 1rem;">Enviar notificación</h3>
+                <div class="form-group">
+                    <label>Selecciona miembro(s):</label>
+                    <select id="notifMember" onchange="updateNotification()">
+                        <option value="">-- Todos los miembros activos --</option>
+                    </select>
+                </div>
+
+                <div id="notificationPreview" style="background: white; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; margin: 1rem 0; max-height: 400px; overflow-y: auto;">
+                    <h4 style="margin-bottom: 0.5rem;">Previsualización:</h4>
+                    <div id="notificationText" style="font-size: 14px; line-height: 1.6; color: #333; white-space: pre-wrap;"></div>
+                </div>
+
+                <div class="btn-group">
+                    <button onclick="copyNotificationText()" class="secondary">📋 Copiar mensaje</button>
+                    <button onclick="exportNotifications()" class="success">Descargar txt</button>
+                </div>
+            </div>
+
+            <!-- Lista rápida por miembro -->
+            <div class="form-section">
+                <h3 style="font-size: 16px; margin-bottom: 1rem;">Copiar por miembro</h3>
+                <input type="text" id="searchNotifQuick" placeholder="Buscar miembro..." oninput="renderQuickNotif()" style="margin-bottom: 1rem;">
+                <div id="quickNotifList" class="member-list" style="max-height: 400px; overflow-y: auto;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Reportes -->
+        <div id="reportes" class="tab-content">
+            <div class="form-section">
+                <h3 style="font-size: 16px; margin-bottom: 1rem;">Reporte general</h3>
+                <div class="form-group">
+                    <input type="text" id="searchReporte" placeholder="Filtrar por nombre..." oninput="renderReporte()">
+                </div>
+                <div class="filter-pills">
+                    <button class="pill active" onclick="setReporteFilter('todos', this)">Todos</button>
+                    <button class="pill" onclick="setReporteFilter('pendiente', this)">Con saldo</button>
+                    <button class="pill" onclick="setReporteFilter('completo', this)">Al corriente ✓</button>
+                    <button class="pill" onclick="setReporteFilter('inactivo', this)">Inactivos</button>
+                </div>
+                <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button onclick="exportReporteCSV()" class="success">Descargar CSV</button>
+                    <button onclick="exportReporteTXT()" class="secondary">Descargar TXT</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Meta</th>
+                                <th>Pagado</th>
+                                <th>Adeuda</th>
+                                <th>%</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reporteBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para editar pago -->
+    <div id="editSinglePaymentModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1rem;">Editar pago</h2>
+            <div class="form-group">
+                <label>Cantidad ($):</label>
+                <input type="number" id="editPayAmount" min="0" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>Fecha:</label>
+                <input type="date" id="editPayDate">
+            </div>
+            <div class="btn-group">
+                <button onclick="closeEditPaymentModal()" class="secondary">Cancelar</button>
+                <button onclick="confirmEditPayment()" class="success">Guardar cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para eliminar pago -->
+    <div id="editPaymentModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1rem;">Eliminar pago</h2>
+            <p style="margin-bottom: 1rem; color: #666;">¿Está seguro que desea eliminar este pago?</p>
+            <div style="background: #f9f9f9; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                <div id="paymentToDelete"></div>
+            </div>
+            <div class="btn-group">
+                <button onclick="closeModal()" class="secondary">Cancelar</button>
+                <button onclick="confirmDeletePayment()" class="danger">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para editar meta -->
+    <div id="editTargetModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 0.5rem;">Editar monto meta</h2>
+            <p style="margin-bottom: 1rem; color: #666;" id="editTargetMemberName"></p>
+            <div class="form-group">
+                <label>Nuevo monto ($):</label>
+                <input type="number" id="editTargetAmount" min="1" step="1">
+            </div>
+            <div class="btn-group">
+                <button onclick="closeEditTargetModal()" class="secondary">Cancelar</button>
+                <button onclick="confirmEditTarget()" class="success">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal confirmación desactivar -->
+    <div id="confirmToggleModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1rem;" id="confirmToggleTitle">Desactivar miembro</h2>
+            <p style="color: #666; margin-bottom: 1rem;" id="confirmToggleMsg"></p>
+            <div class="btn-group">
+                <button onclick="closeConfirmToggleModal()" class="secondary">Cancelar</button>
+                <button id="confirmToggleBtn" onclick="doToggleMember()" class="danger">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURACIÓN
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuwqerTPzEwVrEkPyC30Hx4vYsvO0NC7Wow0N6d3HeeLVpaXQWvMXvpMSw8e_Afm67/exec";
+        const SYNC_INTERVAL = 10000; // Sincronizar cada 10 segundos
+
+        // CONFIGURACIÓN DE VIAJES
+        const VIAJE1 = { nombre: "Viaje Marzo", costo: 213, consumido: true };
+        const VIAJE2 = { nombre: "Viaje Junio", costo: 699, consumido: false };
+
+        // GRUPOS FAMILIARES
+        const familyGroups = [
+            { id: 'f_bruno',     name: 'Bruno Leon',          memberIds: [3, 4] },
+            { id: 'f_hernandez', name: 'Fam. Hernández',      memberIds: [10, 11, 12] },
+            { id: 'f_martinez',  name: 'Fam. Martinez',       memberIds: [13, 14, 15, 16, 17, 18] },
+            { id: 'f_uresti',    name: 'Flor Uresti',         memberIds: [19, 20] },
+            { id: 'f_salazar',   name: 'Ivan Salazar',        memberIds: [21, 22, 23, 24] },
+            { id: 'f_fuente',    name: 'Jesus De la Fuente',  memberIds: [25, 26] },
+            { id: 'f_lorena',    name: 'Lorena Cruz',         memberIds: [29, 30, 31] },
+            { id: 'f_lozoya',    name: 'Magdaleno Lozoya',    memberIds: [32, 33] },
+            { id: 'f_gaona',     name: 'Martha Gaona',        memberIds: [35, 36, 37] },
+        ];
+
+        const membersData = [
+            {id: 1,  name: "Blanca Gonzalez",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 300, date: "2026-11-02"}, {amount: 100, date: "2026-11-16"}]},
+            {id: 2,  name: "Blanca Monsivais",     targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-11-16"}, {amount: 500, date: "2026-04-05"}]},
+            {id: 3,  name: "Bruno Leon 1",         targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-11-25"}]},
+            {id: 4,  name: "Bruno Leon 2",         targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-03-09"}]},
+            {id: 5,  name: "Camerina Torres",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 200, date: "2026-11-02"}, {amount: 400, date: "2026-01-04"}]},
+            {id: 6,  name: "Carmen Ramirez",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 180, date: "2026-11-02"}]},
+            {id: 7,  name: "Carmen Torres",        targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 200, date: "2026-11-02"}, {amount: 220, date: "2026-03-09"}, {amount: 200, date: "2026-03-22"}]},
+            {id: 8,  name: "Conchita Vazquez",     targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 912, date: "2026-03-05"}]},
+            {id: 9,  name: "Emmanuel",             targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-02-22"}]},
+            {id: 10, name: "Fam. Hernández 1",     targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-11-30"}, {amount: 150, date: "2026-03-03"}]},
+            {id: 11, name: "Fam. Hernández 2",     targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 12, name: "Fam. Hernández 3",     targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 13, name: "Fam. Martinez 1",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 300, date: "2026-11-02"}, {amount: 200, date: "2026-11-09"}, {amount: 400, date: "2026-04-05"}]},
+            {id: 14, name: "Fam. Martinez 2",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-11-30"}]},
+            {id: 15, name: "Fam. Martinez 3",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-12-21"}]},
+            {id: 16, name: "Fam. Martinez 4",      targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 17, name: "Fam. Martinez 5",      targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 18, name: "Fam. Martinez 6",      targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 19, name: "Flor Uresti 1",        targetAmount: 1125, active: true, trip2cancelled: false, payments: [{amount: 500, date: "2026-11-02"}]},
+            {id: 20, name: "Flor Uresti 2",        targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 750, date: "2026-03-07"}]},
+            {id: 21, name: "Ivan Salazar 1",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 852, date: "2026-03-01"}]},
+            {id: 22, name: "Ivan Salazar 2",       targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 23, name: "Ivan Salazar 3",       targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 24, name: "Ivan Salazar 4",       targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 25, name: "Jesus De la Fuente 1", targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 250, date: "2026-11-23"}]},
+            {id: 26, name: "Jesus De la Fuente 2", targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 250, date: "2026-11-24"}, {amount: 500, date: "2026-03-30"}]},
+            {id: 27, name: "Joaquin Cordero",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 180, date: "2026-11-02"}, {amount: 213, date: "2026-11-02"}, {amount: 490, date: "2026-11-23"}]},
+            {id: 28, name: "Jonatan Cordero",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 200, date: "2026-11-02"}, {amount: 20, date: "2026-03-08"}]},
+            {id: 29, name: "Lorena Cruz 1",        targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 350, date: "2026-11-01"}, {amount: 300, date: "2026-11-01"}]},
+            {id: 30, name: "Lorena Cruz 2",        targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-11-09"}]},
+            {id: 31, name: "Lorena Cruz 3",        targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 32, name: "Magdaleno Lozoya 1",   targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 200, date: "2026-11-02"}, {amount: 200, date: "2026-03-04"}, {amount: 26, date: "2026-03-05"}]},
+            {id: 33, name: "Magdaleno Lozoya 2",   targetAmount: 912, active: true,  trip2cancelled: false, payments: []},
+            {id: 34, name: "Maricela Peña",        targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 300, date: "2026-12-28"}]},
+            {id: 35, name: "Martha Gaona 1",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 350, date: "2026-11-02"}, {amount: 500, date: "2026-11-09"}]},
+            {id: 36, name: "Martha Gaona 2",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-12-07"}]},
+            {id: 37, name: "Martha Gaona 3",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-12-14"}]},
+            {id: 38, name: "Martina Padron",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 500, date: "2026-11-03"}, {amount: 412, date: "2026-03-17"}]},
+            {id: 39, name: "Mayela Rodriguez",     targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 100, date: "2026-11-02"}, {amount: 113, date: "2026-11-09"}, {amount: 500, date: "2026-04-05"}]},
+            {id: 40, name: "Natalia Canizales",    targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-11-09"}, {amount: 200, date: "2026-12-14"}, {amount: 200, date: "2026-12-28"}, {amount: 200, date: "2026-01-18"}]},
+            {id: 41, name: "Ofelia Alvarez",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-11-02"}, {amount: 350, date: "2026-03-22"}]},
+            {id: 42, name: "Paula Becerra",        targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 200, date: "2026-12-21"}, {amount: 200, date: "2026-02-22"}, {amount: 512, date: "2026-03-22"}]},
+            {id: 43, name: "Silvia Arellano",      targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 420, date: "2026-11-02"}, {amount: 200, date: "2026-12-07"}, {amount: 292, date: "2026-01-04"}]},
+            {id: 44, name: "Silvia Benitez",       targetAmount: 912, active: true,  trip2cancelled: false, payments: [{amount: 213, date: "2026-11-09"}, {amount: 699, date: "2026-03-08"}]},
+            {id: 45, name: "Kathie Thibudeau",     targetAmount: 912, active: false, trip2cancelled: false, payments: [{amount: 213, date: "2026-11-02"}]},
+            {id: 46, name: "Ellis Hawkings",       targetAmount: 912, active: false, trip2cancelled: false, payments: [{amount: 213, date: "2026-11-02"}]},
+            {id: 47, name: "Emmanuel Maldonado",   targetAmount: 912, active: false, trip2cancelled: false, payments: [{amount: 213, date: "2026-03-05"}]},
+            {id: 48, name: "Gloria Jackson",       targetAmount: 912, active: false, trip2cancelled: false, payments: [{amount: 213, date: "2026-11-09"}]},
+            {id: 49, name: "Lorena Cruz 4",        targetAmount: 912, active: false, trip2cancelled: false, payments: []}
+        ];
+
+        let selectedMemberId = null;
+        let selectedErrorMemberId = null;
+        let selectedPaymentIndex = null;
+        let lastSyncTime = 0;
+
+        function getMemberPaid(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            return member ? member.payments.reduce((sum, p) => sum + p.amount, 0) : 0;
+        }
+
+        function getMemberTarget(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            if (!member) return 0;
+            // Si canceló viaje 2, su meta real es solo el costo del viaje 1
+            return member.trip2cancelled ? VIAJE1.costo : member.targetAmount;
+        }
+
+        function getMemberBalance(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            if (!member) return 0;
+            const paid = getMemberPaid(memberId);
+            const target = getMemberTarget(memberId);
+            return Math.max(0, target - paid);
+        }
+
+        function getMemberRefund(memberId) {
+            // Cuánto hay que devolverle si canceló viaje 2
+            const member = membersData.find(m => m.id === memberId);
+            if (!member || !member.trip2cancelled) return 0;
+            const paid = getMemberPaid(memberId);
+            // Solo devolver lo que pagó por encima del viaje 1 ya consumido
+            return Math.max(0, paid - VIAJE1.costo);
+        }
+
+        function getProgress(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            if (!member) return 0;
+            const paid = getMemberPaid(memberId);
+            const target = getMemberTarget(memberId);
+            return Math.min(100, Math.round((paid / target) * 100));
+        }
+
+        function getFamilyByMemberId(memberId) {
+            return familyGroups.find(g => g.memberIds.includes(memberId));
+        }
+
+        function getFamilyTotalTarget(familyId) {
+            const family = familyGroups.find(f => f.id === familyId);
+            if (!family) return 0;
+            return family.memberIds.reduce((sum, mId) => {
+                const m = membersData.find(x => x.id === mId);
+                return sum + (m ? m.targetAmount : 0);
+            }, 0);
+        }
+
+        function getFamilyTotalPaid(familyId) {
+            const family = familyGroups.find(f => f.id === familyId);
+            if (!family) return 0;
+            return family.memberIds.reduce((sum, mId) => sum + getMemberPaid(mId), 0);
+        }
+
+        function getFamilyTotalBalance(familyId) {
+            const target = getFamilyTotalTarget(familyId);
+            const paid = getFamilyTotalPaid(familyId);
+            return Math.max(0, target - paid);
+        }
+
+        function getFamilyProgress(familyId) {
+            const target = getFamilyTotalTarget(familyId);
+            const paid = getFamilyTotalPaid(familyId);
+            return target > 0 ? Math.min(100, Math.round((paid / target) * 100)) : 0;
+        }
+
+        function distributeFamilyPayment(familyId, amount) {
+            const family = familyGroups.find(f => f.id === familyId);
+            if (!family) return;
+            const perMember = amount / family.memberIds.length;
+            family.memberIds.forEach(mId => {
+                const member = membersData.find(m => m.id === mId);
+                if (member) {
+                    member.payments.push({
+                        amount: perMember,
+                        date: new Date().toISOString().split('T')[0]
+                    });
+                }
+            });
+        }
+            const active = membersData.filter(m => m.active).length;
+            const totalRecaudado = membersData.reduce((sum, m) => sum + (m.active ? getMemberPaid(m.id) : 0), 0);
+            const totalTarget = membersData.reduce((sum, m) => sum + (m.active ? m.targetAmount : 0), 0);
+            const totalPendiente = totalTarget - totalRecaudado;
+            const avance = Math.round((totalRecaudado / totalTarget) * 100);
+
+            document.getElementById('totalMembers').textContent = active;
+            document.getElementById('totalRecaudado').textContent = '$' + totalRecaudado.toLocaleString('es-MX', {maximumFractionDigits: 0});
+            document.getElementById('totalPendiente').textContent = '$' + totalPendiente.toLocaleString('es-MX', {maximumFractionDigits: 0});
+            document.getElementById('avancePorc').textContent = avance + '%';
+        }
+
+        function showSyncStatus(message, type = 'success') {
+            const status = document.getElementById('syncStatus');
+            status.textContent = message;
+            status.className = 'sync-status ' + type;
+            status.style.display = 'block';
+            setTimeout(() => { status.style.display = 'none'; }, 3000);
+        }
+
+        async function syncToGoogleSheets() {
+            if (Date.now() - lastSyncTime < 2000) return;
+            lastSyncTime = Date.now();
+
+            try {
+                showSyncStatus('Sincronizando...', 'syncing');
+                
+                const payments = [];
+                membersData.forEach(member => {
+                    member.payments.forEach(p => {
+                        payments.push({
+                            memberId: member.id,
+                            memberName: member.name,
+                            date: p.date,
+                            amount: p.amount
+                        });
+                    });
+                });
+
+                await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'savePayments',
+                        payments: payments
+                    })
+                });
+
+                await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'saveMembers',
+                        members: membersData
+                    })
+                });
+
+                showSyncStatus('✓ Sincronizado con Google Sheets', 'success');
+            } catch (error) {
+                showSyncStatus('⚠ Error al sincronizar', 'error');
+                console.error('Sync error:', error);
+            }
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tab).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tab === 'notificaciones') { updateNotificationSelects(); renderQuickNotif(); }
+            if (tab === 'reportes') renderReporte();
+            if (tab === 'miembros') renderMembersGestion();
+        }
+
+        function renderQuickNotif() {
+            const search = (document.getElementById('searchNotifQuick')?.value || '').toLowerCase();
+            const list = document.getElementById('quickNotifList');
+            if (!list) return;
+            list.innerHTML = '';
+            membersData
+                .sort((a, b) => { if (a.active === b.active) return a.name.localeCompare(b.name); return a.active ? -1 : 1; })
+                .filter(m => m.name.toLowerCase().includes(search))
+                .forEach(member => {
+                    const paid = getMemberPaid(member.id);
+                    const balance = getMemberBalance(member.id);
+                    const card = document.createElement('div');
+                    card.className = 'member-card' + (!member.active ? ' inactive-card' : '');
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                            <div>
+                                <div class="member-name">${member.name} ${!member.active ? '<span class="badge-inactive">Inactivo</span>' : ''}</div>
+                                <div style="font-size: 12px; color: #666; margin-top: 2px;">Pagado: $${paid.toLocaleString()} | ${balance === 0 ? '¡Al corriente!' : 'Adeuda: $' + balance.toLocaleString()}</div>
+                            </div>
+                            <button class="copy-notif-btn" onclick="copyMemberNotification(${member.id})">📋 Copiar mensaje</button>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+        }
+
+        function copyMemberNotification(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            const paid = getMemberPaid(member.id);
+            const balance = getMemberBalance(member.id);
+            const text = generateNotificationText(member.name, getMemberTarget(member.id), paid, balance, member.payments, !member.active, member.id);
+            navigator.clipboard.writeText(text).then(() => {
+                showSyncStatus(`✓ Mensaje de ${member.name} copiado`);
+            });
+        }
+
+        function filterMembers() {
+            const search = document.getElementById('searchMember').value.toLowerCase();
+            const list = document.getElementById('membersList');
+            list.innerHTML = '';
+
+            // Mostrar grupos familiares primero
+            familyGroups.forEach(family => {
+                const allActive = family.memberIds.every(mId => membersData.find(m => m.id === mId)?.active);
+                if (!allActive) return; // Solo mostrar si todos están activos
+                if (!family.name.toLowerCase().includes(search)) return;
+
+                const paid = getFamilyTotalPaid(family.id);
+                const balance = getFamilyTotalBalance(family.id);
+                const progress = getFamilyProgress(family.id);
+                const isComplete = balance === 0;
+
+                const card = document.createElement('div');
+                card.className = 'member-card' + (selectedMemberId === 'fam_' + family.id ? ' selected' : '') + (isComplete ? ' completed' : '');
+                card.onclick = () => { selectedMemberId = 'fam_' + family.id; selectMember(); };
+                card.innerHTML = `
+                    <div class="member-name">👨‍👩‍👧 ${family.name}${isComplete ? '<span class="badge-complete">✓ Pagado</span>' : ''}</div>
+                    <div class="member-info">
+                        <span>Pagado: $${paid.toLocaleString()}</span>
+                        <span>${isComplete ? '¡Al corriente!' : 'Adeuda: $' + balance.toLocaleString()}</span>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" style="width: ${progress}%; background: ${isComplete ? '#16a34a' : '#2563eb'};"></div></div>
+                `;
+                list.appendChild(card);
+            });
+
+            // Mostrar miembros individuales (no en familias)
+            const individualIds = membersData.filter(m => m.active && !familyGroups.some(f => f.memberIds.includes(m.id))).map(m => m.id);
+            membersData.filter(m => m.active && individualIds.includes(m.id) && m.name.toLowerCase().includes(search)).forEach(member => {
+                const paid = getMemberPaid(member.id);
+                const balance = getMemberBalance(member.id);
+                const progress = getProgress(member.id);
+                const isComplete = balance === 0;
+
+                const card = document.createElement('div');
+                card.className = 'member-card' + (selectedMemberId === member.id ? ' selected' : '') + (isComplete ? ' completed' : '');
+                card.onclick = () => { selectedMemberId = member.id; selectMember(); };
+                card.innerHTML = `
+                    <div class="member-name">${member.name}${isComplete ? '<span class="badge-complete">✓ Pagado</span>' : ''}</div>
+                    <div class="member-info">
+                        <span>Pagado: $${paid.toLocaleString()}</span>
+                        <span>${isComplete ? '¡Al corriente!' : 'Adeuda: $' + balance.toLocaleString()}</span>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" style="width: ${progress}%; background: ${isComplete ? '#16a34a' : '#2563eb'};"></div></div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function selectMember(memberId) {
+            if (memberId) selectedMemberId = memberId;
+            if (!selectedMemberId) return;
+
+            const info = document.getElementById('selectedMemberInfo');
+            const nameEl = document.getElementById('selectedName');
+            const saldoEl = document.getElementById('selectedSaldo');
+            const progressEl = document.getElementById('selectedProgress');
+
+            let name, saldo, progress;
+
+            if (selectedMemberId.toString().startsWith('fam_')) {
+                const familyId = selectedMemberId.toString().replace('fam_', '');
+                const family = familyGroups.find(f => f.id === familyId);
+                name = `👨‍👩‍👧 ${family.name} (${family.memberIds.length} asientos)`;
+                saldo = getFamilyTotalBalance(familyId);
+                progress = getFamilyProgress(familyId);
+            } else {
+                const member = membersData.find(m => m.id === selectedMemberId);
+                if (!member) return;
+                name = member.name;
+                saldo = getMemberBalance(selectedMemberId);
+                progress = getProgress(selectedMemberId);
+            }
+
+            nameEl.textContent = name;
+            saldoEl.textContent = '$' + saldo.toLocaleString();
+            progressEl.style.width = progress + '%';
+            info.style.display = 'block';
+            filterMembers();
+        }
+
+        function addPayment() {
+            if (!selectedMemberId) { alert('Selecciona miembro o familia'); return; }
+            const amount = parseFloat(document.getElementById('paymentAmount').value);
+            const date = document.getElementById('paymentDate').value;
+            if (!amount || !date) { alert('Completa datos'); return; }
+
+            if (selectedMemberId.toString().startsWith('fam_')) {
+                const familyId = selectedMemberId.toString().replace('fam_', '');
+                distributeFamilyPayment(familyId, amount);
+            } else {
+                const member = membersData.find(m => m.id === selectedMemberId);
+                member.payments.push({amount, date});
+            }
+
+            document.getElementById('paymentAmount').value = '';
+            updateStats();
+            filterMembers();
+            selectMember();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+            alert('✓ Pago registrado');
+        }
+
+        function filterErrorMembers() {
+            const search = document.getElementById('searchError').value.toLowerCase();
+            const list = document.getElementById('errorMembersList');
+            list.innerHTML = '';
+
+            membersData.filter(m => m.active && m.name.toLowerCase().includes(search)).forEach(member => {
+                const card = document.createElement('div');
+                card.className = 'member-card' + (selectedErrorMemberId === member.id ? ' selected' : '');
+                card.onclick = () => selectErrorMember(member.id);
+                card.innerHTML = `<div class="member-name">${member.name}</div>`;
+                list.appendChild(card);
+            });
+        }
+
+        function selectErrorMember(memberId) {
+            selectedErrorMemberId = memberId;
+            selectedPaymentIndex = null;
+            const member = membersData.find(m => m.id === memberId);
+            const list = document.getElementById('editPaymentsList');
+            list.innerHTML = '';
+
+            if (member.payments.length === 0) {
+                list.innerHTML = '<p style="color: #666;">Sin pagos</p>';
+            } else {
+                member.payments.forEach((p, idx) => {
+                    const item = document.createElement('div');
+                    item.className = 'payment-item';
+                    item.innerHTML = `
+                        <div><div>${new Date(p.date).toLocaleDateString()}</div><div style="font-weight: 600;">$${p.amount.toLocaleString()}</div></div>
+                        <div style="display:flex; gap:0.4rem;">
+                            <button onclick="openEditPaymentModal(${idx})" class="secondary" style="padding:0.4rem 0.75rem; font-size:12px;">Editar</button>
+                            <button onclick="selectPaymentToDelete(${idx})" class="danger" style="padding:0.4rem 0.75rem; font-size:12px;">Eliminar</button>
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+
+            document.getElementById('editPaymentSection').style.display = 'block';
+            const select = document.getElementById('transferToMember');
+            select.innerHTML = '<option value="">-- Selecciona --</option>';
+            membersData.filter(m => m.id !== memberId && m.active).forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.name;
+                select.appendChild(opt);
+            });
+            filterErrorMembers();
+        }
+
+        function openEditPaymentModal(idx) {
+            selectedPaymentIndex = idx;
+            const member = membersData.find(m => m.id === selectedErrorMemberId);
+            const p = member.payments[idx];
+            document.getElementById('editPayAmount').value = p.amount;
+            document.getElementById('editPayDate').value = p.date;
+            document.getElementById('editSinglePaymentModal').classList.add('active');
+        }
+
+        function confirmEditPayment() {
+            const amount = parseFloat(document.getElementById('editPayAmount').value);
+            const date = document.getElementById('editPayDate').value;
+            if (!amount || !date) { alert('Completa todos los datos'); return; }
+            const member = membersData.find(m => m.id === selectedErrorMemberId);
+            member.payments[selectedPaymentIndex] = { amount, date };
+            closeEditPaymentModal();
+            selectErrorMember(selectedErrorMemberId);
+            updateStats();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+            showSyncStatus('✓ Pago actualizado');
+        }
+
+        function closeEditPaymentModal() {
+            document.getElementById('editSinglePaymentModal').classList.remove('active');
+        }
+
+        function selectPaymentToDelete(idx) {
+            selectedPaymentIndex = idx;
+            const member = membersData.find(m => m.id === selectedErrorMemberId);
+            const p = member.payments[idx];
+            document.getElementById('paymentToDelete').innerHTML = `<strong>${new Date(p.date).toLocaleDateString()}</strong><br>$${p.amount.toLocaleString()}`;
+            document.getElementById('editPaymentModal').classList.add('active');
+        }
+
+        function confirmDeletePayment() {
+            const member = membersData.find(m => m.id === selectedErrorMemberId);
+            member.payments.splice(selectedPaymentIndex, 1);
+            document.getElementById('editPaymentModal').classList.remove('active');
+            selectErrorMember(selectedErrorMemberId);
+            updateStats();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+            alert('✓ Pago eliminado');
+        }
+
+        function closeModal() {
+            document.getElementById('editPaymentModal').classList.remove('active');
+        }
+
+        function transferPayment() {
+            const toMemberId = parseInt(document.getElementById('transferToMember').value);
+            if (!toMemberId) { alert('Selecciona destino'); return; }
+
+            const fromMember = membersData.find(m => m.id === selectedErrorMemberId);
+            const toMember = membersData.find(m => m.id === toMemberId);
+            const payment = fromMember.payments[selectedPaymentIndex];
+
+            toMember.payments.push(payment);
+            fromMember.payments.splice(selectedPaymentIndex, 1);
+            selectErrorMember(selectedErrorMemberId);
+            updateStats();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+            alert(`✓ Pago transferido a ${toMember.name}`);
+        }
+
+        let pendingToggleMemberId = null;
+        let reporteFilter = 'todos';
+
+        function renderMembersGestion() {
+            const search = document.getElementById('searchMembersGestion').value.toLowerCase();
+            const list = document.getElementById('gestionMembersList');
+            list.innerHTML = '';
+
+            const sorted = membersData
+                .filter(m => m.name.toLowerCase().includes(search))
+                .sort((a, b) => {
+                    if (a.active === b.active) return a.name.localeCompare(b.name);
+                    return a.active ? -1 : 1;
+                });
+
+            sorted.forEach(member => {
+                const paid = getMemberPaid(member.id);
+                const refund = getMemberRefund(member.id);
+                const card = document.createElement('div');
+                card.className = 'member-card' + (!member.active ? ' inactive-card' : '');
+
+                const viajeInfo = member.trip2cancelled
+                    ? `<div class="trip-info-box refund">
+                        <span class="badge-trip1">✓ Viaje Marzo $${VIAJE1.costo}</span>
+                        <span class="badge-trip2-cancel">✗ Viaje Junio cancelado</span>
+                        ${refund > 0 ? `<div style="margin-top:0.4rem;color:#92400e;font-weight:600;">Devolución: $${refund.toLocaleString()}</div>` : '<div style="margin-top:0.4rem;color:#555;">Sin devolución pendiente</div>'}
+                       </div>`
+                    : `<div class="trip-info-box">
+                        <span class="badge-trip1">✓ Viaje Marzo $${VIAJE1.costo}</span>
+                        <span class="badge-trip2-ok">Viaje Junio $${VIAJE2.costo}</span>
+                       </div>`;
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem;">
+                        <div style="flex:1; min-width:0;">
+                            <div class="member-name">${member.name}
+                                ${!member.active ? '<span class="badge-inactive">Inactivo</span>' : ''}
+                            </div>
+                            <div class="member-info" style="font-size: 12px; margin-top: 2px;">
+                                Meta: <strong>$${getMemberTarget(member.id).toLocaleString()}</strong> &nbsp;|&nbsp; Pagado: <strong>$${paid.toLocaleString()}</strong>
+                            </div>
+                            ${viajeInfo}
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-end;">
+                            <button onclick="openEditTargetModal(${member.id})" class="secondary" style="padding: 0.4rem 0.75rem; font-size: 12px;">Editar meta</button>
+                            <button onclick="requestToggleTrip2(${member.id})" class="${member.trip2cancelled ? 'success' : 'danger'}" style="padding: 0.4rem 0.75rem; font-size: 12px;">${member.trip2cancelled ? 'Reactivar Junio' : 'Cancelar Junio'}</button>
+                            <button onclick="requestToggleMember(${member.id})" class="${member.active ? 'danger' : 'success'}" style="padding: 0.4rem 0.75rem; font-size: 12px;">${member.active ? 'Desactivar' : 'Activar'}</button>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function filterMembersGestion() { renderMembersGestion(); }
+
+        function requestToggleTrip2(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            const cancelling = !member.trip2cancelled;
+            const refund = cancelling ? Math.max(0, getMemberPaid(memberId) - VIAJE1.costo) : 0;
+            pendingToggleMemberId = memberId;
+            document.getElementById('confirmToggleTitle').textContent = cancelling ? 'Cancelar Viaje Junio' : 'Reactivar Viaje Junio';
+            document.getElementById('confirmToggleMsg').textContent = cancelling
+                ? `¿Cancelar el Viaje de Junio para ${member.name}? Solo se le cobrará el Viaje de Marzo ($${VIAJE1.costo}).${refund > 0 ? ' Devolución calculada: $' + refund.toLocaleString() + '.' : ' No tiene saldo a devolver.'}`
+                : `¿Reactivar el Viaje de Junio para ${member.name}? Su meta volverá a ser $${(VIAJE1.costo + VIAJE2.costo).toLocaleString()}.`;
+            document.getElementById('confirmToggleBtn').className = cancelling ? 'danger' : 'success';
+            document.getElementById('confirmToggleBtn').textContent = cancelling ? 'Cancelar Viaje Junio' : 'Reactivar';
+            document.getElementById('confirmToggleBtn').onclick = doToggleTrip2;
+            document.getElementById('confirmToggleModal').classList.add('active');
+        }
+
+        function doToggleTrip2() {
+            const member = membersData.find(m => m.id === pendingToggleMemberId);
+            member.trip2cancelled = !member.trip2cancelled;
+            closeConfirmToggleModal();
+            updateStats();
+            renderMembersGestion();
+            filterMembers();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+        }
+
+        function requestToggleMember(memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            pendingToggleMemberId = memberId;
+            const deactivating = member.active;
+            document.getElementById('confirmToggleTitle').textContent = deactivating ? 'Desactivar miembro' : 'Activar miembro';
+            document.getElementById('confirmToggleMsg').textContent = deactivating
+                ? `¿Está seguro que desea desactivar a ${member.name}? Dejará de aparecer en los listados activos.`
+                : `¿Desea volver a activar a ${member.name}?`;
+            document.getElementById('confirmToggleBtn').className = deactivating ? 'danger' : 'success';
+            document.getElementById('confirmToggleBtn').textContent = deactivating ? 'Desactivar' : 'Activar';
+            document.getElementById('confirmToggleBtn').onclick = doToggleMember;
+            document.getElementById('confirmToggleModal').classList.add('active');
+        }
+
+        function doToggleMember() {
+            const member = membersData.find(m => m.id === pendingToggleMemberId);
+            member.active = !member.active;
+            closeConfirmToggleModal();
+            updateStats();
+            renderMembersGestion();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+        }
+
+        function closeConfirmToggleModal() {
+            document.getElementById('confirmToggleModal').classList.remove('active');
+            pendingToggleMemberId = null;
+        }
+
+        let editTargetMemberId = null;
+        function openEditTargetModal(memberId) {
+            editTargetMemberId = memberId;
+            const member = membersData.find(m => m.id === memberId);
+            document.getElementById('editTargetMemberName').textContent = member.name;
+            document.getElementById('editTargetAmount').value = member.targetAmount;
+            document.getElementById('editTargetModal').classList.add('active');
+        }
+
+        function confirmEditTarget() {
+            const newAmount = parseFloat(document.getElementById('editTargetAmount').value);
+            if (!newAmount || newAmount <= 0) { alert('Ingrese un monto válido'); return; }
+            const member = membersData.find(m => m.id === editTargetMemberId);
+            member.targetAmount = newAmount;
+            closeEditTargetModal();
+            updateStats();
+            renderMembersGestion();
+            filterMembers();
+            localStorage.setItem('membersData', JSON.stringify(membersData));
+            syncToGoogleSheets();
+        }
+
+        function closeEditTargetModal() {
+            document.getElementById('editTargetModal').classList.remove('active');
+            editTargetMemberId = null;
+        }
+
+        function updateNotificationSelects() {
+            const select = document.getElementById('notifMember');
+            select.innerHTML = '<option value="">-- Todos los miembros activos --</option>';
+
+            const active = membersData.filter(m => m.active);
+            const inactive = membersData.filter(m => !m.active);
+
+            if (active.length > 0) {
+                const grpActive = document.createElement('optgroup');
+                grpActive.label = 'Activos';
+                active.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = m.name;
+                    grpActive.appendChild(opt);
+                });
+                select.appendChild(grpActive);
+            }
+
+            if (inactive.length > 0) {
+                const grpInactive = document.createElement('optgroup');
+                grpInactive.label = 'Inactivos (devolución)';
+                inactive.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = m.name + ' ✗';
+                    grpInactive.appendChild(opt);
+                });
+                select.appendChild(grpInactive);
+            }
+
+            updateNotification();
+        }
+
+        function updateNotification() {
+            const memberId = document.getElementById('notifMember').value;
+            const div = document.getElementById('notificationText');
+            let text = '';
+
+            if (memberId) {
+                const member = membersData.find(m => m.id == memberId);
+                const paid = getMemberPaid(member.id);
+                const balance = getMemberBalance(member.id);
+                text = generateNotificationText(member.name, getMemberTarget(member.id), paid, balance, member.payments, !member.active, member.id);
+            } else {
+                const active = membersData.filter(m => m.active);
+                text = active.map(m => {
+                    const paid = getMemberPaid(m.id);
+                    const balance = getMemberBalance(m.id);
+                    return generateNotificationText(m.name, getMemberTarget(m.id), paid, balance, m.payments, false, m.id);
+                }).join('\n' + '='.repeat(50) + '\n\n');
+            }
+            div.textContent = text;
+        }
+
+        function generateNotificationText(name, target, paid, balance, payments, inactive, memberId) {
+            const member = membersData.find(m => m.id === memberId);
+            const trip2cancelled = member ? member.trip2cancelled : false;
+            const refund = member ? getMemberRefund(member.id) : 0;
+
+            let text = `Estimado/a ${name},\n\n`;
+
+            if (trip2cancelled) {
+                text += `Resumen de sus pagos para el transporte (cancelación Viaje Junio):\n\n`;
+                text += `✓ ${VIAJE1.nombre}: $${VIAJE1.costo} — Consumido\n`;
+                text += `✗ ${VIAJE2.nombre}: $${VIAJE2.costo} — Cancelado\n\n`;
+                text += `Total pagado: $${paid.toLocaleString()}\n`;
+                text += `Costo del viaje consumido: $${VIAJE1.costo}\n`;
+                text += `Monto a devolver: $${refund.toLocaleString()}\n\n`;
+            } else if (inactive) {
+                text += `Resumen de sus pagos para el transporte (devolución por cancelación):\n\n`;
+                text += `Total pagado: $${paid.toLocaleString()}\n`;
+                text += `Monto a devolver: $${paid.toLocaleString()}\n\n`;
+            } else {
+                text += `Resumen de sus pagos para el transporte:\n\n`;
+                text += `✓ ${VIAJE1.nombre}: $${VIAJE1.costo} — Consumido\n`;
+                text += `  ${VIAJE2.nombre}: $${VIAJE2.costo} — Próximo\n\n`;
+                text += `Total a pagar: $${target.toLocaleString()}\n`;
+                text += `Total pagado: $${paid.toLocaleString()}\n`;
+                text += `Saldo adeudado: $${balance.toLocaleString()}\n\n`;
+            }
+
+            if (payments.length > 0) {
+                text += `Historial de pagos:\n`;
+                [...payments].sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(p => {
+                    text += `  • ${new Date(p.date).toLocaleDateString()}: $${p.amount.toLocaleString()}\n`;
+                });
+            }
+
+            text += `\nSi tiene preguntas, por favor contáctenos.`;
+            return text;
+        }
+
+        function copyNotificationText() {
+            navigator.clipboard.writeText(document.getElementById('notificationText').textContent).then(() => {
+                showSyncStatus('✓ Mensaje copiado');
+            });
+        }
+
+        function exportNotifications() {
+            const text = document.getElementById('notificationText').textContent;
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+            element.setAttribute('download', 'notificaciones.txt');
+            element.click();
+        }
+
+        function setReporteFilter(filter, el) {
+            reporteFilter = filter;
+            document.querySelectorAll('.filter-pills .pill').forEach(p => p.classList.remove('active'));
+            el.classList.add('active');
+            renderReporte();
+        }
+
+        function renderReporte() {
+            const search = document.getElementById('searchReporte').value.toLowerCase();
+            const tbody = document.getElementById('reporteBody');
+            tbody.innerHTML = '';
+
+            let data = membersData.filter(m => m.name.toLowerCase().includes(search));
+            if (reporteFilter === 'pendiente') data = data.filter(m => m.active && getMemberBalance(m.id) > 0);
+            else if (reporteFilter === 'completo') data = data.filter(m => m.active && getMemberBalance(m.id) === 0);
+            else if (reporteFilter === 'inactivo') data = data.filter(m => !m.active);
+            else data = data.filter(m => m.active);
+
+            data.sort((a, b) => getMemberBalance(b.id) - getMemberBalance(a.id))
+                .forEach(member => {
+                    const paid = getMemberPaid(member.id);
+                    const balance = getMemberBalance(member.id);
+                    const progress = getProgress(member.id);
+                    const isComplete = balance === 0;
+                    const row = document.createElement('tr');
+                    const estadoLabel = !member.active ? '<span class="badge-inactive">Inactivo</span>' : isComplete ? '<span class="badge-complete">✓ Pagado</span>' : '<span style="color:#dc2626;font-weight:600;">Pendiente</span>';
+                    row.innerHTML = `
+                        <td>${member.name}</td>
+                        <td>$${member.targetAmount.toLocaleString()}</td>
+                        <td>$${paid.toLocaleString()}</td>
+                        <td style="color: ${balance === 0 ? '#16a34a' : '#dc2626'}; font-weight: 600;">$${balance.toLocaleString()}</td>
+                        <td>${progress}%</td>
+                        <td>${estadoLabel}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+        }
+
+        function getDateStamp() {
+            const d = new Date();
+            const dd = String(d.getDate()).padStart(2,'0');
+            const mm = String(d.getMonth()+1).padStart(2,'0');
+            const yyyy = d.getFullYear();
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function exportReporteCSV() {
+            const search = document.getElementById('searchReporte').value.toLowerCase();
+            let csv = 'Nombre,Meta,Pagado,Adeuda,Porcentaje,Estado\n';
+            let data = membersData.filter(m => m.name.toLowerCase().includes(search));
+            if (reporteFilter === 'pendiente') data = data.filter(m => m.active && getMemberBalance(m.id) > 0);
+            else if (reporteFilter === 'completo') data = data.filter(m => m.active && getMemberBalance(m.id) === 0);
+            else if (reporteFilter === 'inactivo') data = data.filter(m => !m.active);
+            else data = data.filter(m => m.active);
+            data.sort((a, b) => getMemberBalance(b.id) - getMemberBalance(a.id))
+                .forEach(m => {
+                    const paid = getMemberPaid(m.id);
+                    const balance = getMemberBalance(m.id);
+                    const progress = getProgress(m.id);
+                    const estado = !m.active ? 'Inactivo' : balance === 0 ? 'Pagado completo' : 'Pendiente';
+                    csv += `"${m.name}",${m.targetAmount},${paid},${balance},${progress}%,"${estado}"\n`;
+                });
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv));
+            element.setAttribute('download', `reporte_${getDateStamp()}.csv`);
+            element.click();
+        }
+
+        function exportReporteTXT() {
+            const search = document.getElementById('searchReporte').value.toLowerCase();
+            let text = 'REPORTE DE PAGOS - TRANSPORTE ASAMBLEAS\n' + '='.repeat(40) + '\n\n';
+            text += 'Fecha: ' + new Date().toLocaleDateString('es-MX') + '\n\n';
+            
+            let totalMeta = 0, totalPagado = 0;
+            let data = membersData.filter(m => m.name.toLowerCase().includes(search));
+            if (reporteFilter === 'pendiente') data = data.filter(m => m.active && getMemberBalance(m.id) > 0);
+            else if (reporteFilter === 'completo') data = data.filter(m => m.active && getMemberBalance(m.id) === 0);
+            else if (reporteFilter === 'inactivo') data = data.filter(m => !m.active);
+            else data = data.filter(m => m.active);
+
+            data.forEach(m => {
+                const paid = getMemberPaid(m.id);
+                const balance = getMemberBalance(m.id);
+                const progress = getProgress(m.id);
+                const estado = !m.active ? 'INACTIVO' : balance === 0 ? 'PAGADO COMPLETO' : 'PENDIENTE';
+                totalMeta += m.targetAmount;
+                totalPagado += paid;
+                text += `${m.name} [${estado}]\n  Meta: $${m.targetAmount.toLocaleString()} | Pagado: $${paid.toLocaleString()} | Adeuda: $${balance.toLocaleString()} (${progress}%)\n\n`;
+            });
+            
+            text += '='.repeat(60) + '\nTOTALES: Meta: $' + totalMeta.toLocaleString() + ' | Pagado: $' + totalPagado.toLocaleString() + '\n';
+            
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+            element.setAttribute('download', `reporte_${getDateStamp()}.txt`);
+            element.click();
+        }
+
+        async function reloadFromSheets() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            document.getElementById('loadingMsg').textContent = 'Recargando desde Google Sheets...';
+            const ok = await loadFromGoogleSheets();
+            document.getElementById('loadingOverlay').style.display = 'none';
+            updateStats();
+            filterMembers();
+            showSyncStatus(ok ? '✓ Datos actualizados desde Google Sheets' : '⚠ No se pudo conectar con Google Sheets', ok ? 'success' : 'error');
+        }
+
+        function loadFromGoogleSheets() {
+            return new Promise((resolve) => {
+                const callbackName = 'gsCallback_' + Date.now();
+                const script = document.createElement('script');
+                const timeout = setTimeout(() => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(false);
+                }, 8000);
+
+                window[callbackName] = function(data) {
+                    clearTimeout(timeout);
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    try {
+                        if (data && data.success && Array.isArray(data.members) && data.members.length > 0) {
+                            data.members.forEach(remote => {
+                                const local = membersData.find(m => m.id == remote.id);
+                                if (local) {
+                                    local.payments = remote.payments || [];
+                                    local.active = remote.active !== undefined ? remote.active : true;
+                                    local.trip2cancelled = remote.trip2cancelled !== undefined ? remote.trip2cancelled : false;
+                                    if (remote.targetAmount) local.targetAmount = remote.targetAmount;
+                                }
+                            });
+                            localStorage.setItem('membersData', JSON.stringify(membersData));
+                            resolve(true);
+                        } else {
+                            resolve(false);
+                        }
+                    } catch(e) {
+                        resolve(false);
+                    }
+                };
+
+                script.src = APPS_SCRIPT_URL + '?action=getMembers&callback=' + callbackName;
+                script.onerror = () => {
+                    clearTimeout(timeout);
+                    delete window[callbackName];
+                    resolve(false);
+                };
+                document.body.appendChild(script);
+            });
+        }
+
+        window.addEventListener('load', async () => {
+            // Intentar cargar desde Google Sheets primero
+            const loaded = await loadFromGoogleSheets();
+
+            if (!loaded) {
+                // Si falla, usar localStorage como respaldo
+                document.getElementById('loadingMsg').textContent = 'Sin conexión — cargando datos locales...';
+                await new Promise(r => setTimeout(r, 800));
+                const saved = localStorage.getItem('membersData');
+                if (saved) {
+                    const localData = JSON.parse(saved);
+                    localData.forEach(member => {
+                        const existing = membersData.find(m => m.id === member.id);
+                        if (existing) {
+                            existing.payments = member.payments;
+                            existing.active = member.active !== undefined ? member.active : true;
+                            existing.trip2cancelled = member.trip2cancelled !== undefined ? member.trip2cancelled : false;
+                            if (member.targetAmount) existing.targetAmount = member.targetAmount;
+                        }
+                    });
+                }
+            }
+
+            document.getElementById('loadingOverlay').style.display = 'none';
+            updateStats();
+            filterMembers();
+            document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
+        });
+    </script>
+</body>
+</html>
